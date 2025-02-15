@@ -1,0 +1,27 @@
+{
+    "raster_path": "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/FullSample/outputfiles/AO_20240708_c_20240716_WC_SC.tif",
+    "mask_paths": [
+        "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/free_ukraine_20240522_32636.shp",
+        "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/crimea_32636.shp",
+        "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/occ_wout_crimea_20240522_32636.shp"
+    ],
+    "output_dir": "/home/rohan/nasa-harvest/AnnotationProject/data/playground",
+    "epsg": "+proj=aea +lat_1=40 +lat_2=50 +lat_0=45 +lon_0=30 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_def",
+    "class_merge_dict": {
+        "0": 0,
+        "1": 0,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 2
+    },
+    "sampling": {
+        "method": "proportional",
+        "expected_uas": {
+            "0": 0.95,
+            "2": 0.85,
+            "3":0.85,
+            "4": 0.85},
+        "target_error":  0.01
+    }
+}

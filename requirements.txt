@@ -1,0 +1,8 @@
+click
+json
+rasterio
+gdal
+geopandas
+pandas
+numpy
+fastapi

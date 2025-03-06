@@ -1,54 +1,32 @@
 import click
-import json
 
-from sampling_allocation import ProportionalAllocator, NeymanAllocator
-from unbiased_estimation import AreaEstimator
+from unbiased_area_estimation.sampling_allocation import create_sample_allocator
+from unbiased_area_estimation.unbiased_estimation import AreaEstimator
+from unbiased_area_estimation.utils import read_config
 
-def read_config(config_file):
-    with open(config_file, 'r') as f:
-        config = json.load(f)
-
-    config['class_merge_dict'] = {int(k): int(v) for k, v in config['class_merge_dict'].items()}
-    config['sampling']['expected_uas'] = {int(k): float(v) for k, v in config['sampling']['expected_uas'].items()}
-    return config
-
-def create_sample_allocator(sampling_params):
-    if sampling_params['method'] == 'proportional':
-        return ProportionalAllocator(
-            expected_uas=sampling_params['expected_uas'],
-            target_error=sampling_params['target_error']
-        )
-    elif sampling_params['method'] == 'neyman':
-        return NeymanAllocator(
-            expected_uas=sampling_params['expected_uas'],
-            target_error=sampling_params['target_error']
-        )
-    else:
-        raise ValueError('Invalid sampling method specified in config file.')
 
 @click.command()
-@click.argument('config_file')
+@click.argument("config_file")
 def main(config_file):
-    # IMPORTANT - THIS IS A WIP THAT WILL LEAD TO WRONG RESULTS IF 
-    # INCORRECT NODATA VALUES ARE USED. TODO CHECK RASTER MASKIN ZERO COUNTING 
+    # IMPORTANT - THIS IS A WIP THAT WILL LEAD TO WRONG RESULTS IF INCORRECT NODATA VALUES ARE USED.
+    # TODO CHECK RASTER MASKING ZERO COUNTING
 
     config = read_config(config_file)
-    sample_allocator = create_sample_allocator(config['sampling'])
+    sample_allocator = create_sample_allocator(config["sampling"])
 
     area_estimator = AreaEstimator(
-        raster_path=config['raster_path'],
-        mask_paths=config['mask_paths'],
-        class_merge_dict=config['class_merge_dict'],
-        epsg=config['epsg'],
-        sample_allocator=sample_allocator
+        raster_path=config["raster_path"],
+        mask_paths=config["mask_paths"],
+        class_merge_dict=config["class_merge_dict"],
+        epsg=config["epsg"],
+        sample_allocator=sample_allocator,
+        temp_dir=config["output_dir"],
+        output_dir=config["output_dir"],
     )
 
-    area_estimator.prepare_raster()
-    sampling_designs = area_estimator.create_sample_designs()
+    # Preprocesses data, creates a sample allocation and saves the samples in the output directory
+    area_estimator.run_complete_sampling_design(single_file=True)
 
-    sample_sets = area_estimator.create_sample_sets(sampling_designs)
-    area_estimator.save_sample_sets(sample_sets, config['output_dir'], False)
-    
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

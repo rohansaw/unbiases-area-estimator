@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unbiased_area_estimation"
+version = "0.1.0"
+authors = [
+    { name="Rohan Sawahn", email="rohan.sawahn@posteo.de" },
+]
+description = "Unbiased Area Estimation tooling - Create random stratified samples from geotiffs and estimate areas."
+readme = "README.md"
+requires-python = ">=3.7"
+license = { file = "LICENSE" }
+dependencies = [
+    "click",
+    "rasterio",
+    "gdal",
+    "geopandas",
+    "pandas",
+    "numpy",
+    "mmh3",
+    "ipywidgets",
+    "ipython",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black==23.1.0",
+    "flake8==6.1.0",
+    "isort==5.12.0",
+    "pre-commit",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E501"]  # Ignore long-line warnings (handled by Black)
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]

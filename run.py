@@ -1,31 +1,21 @@
 import click
 
-from unbiased_area_estimation.sampling_allocation import create_sample_allocator
-from unbiased_area_estimation.unbiased_estimation import AreaEstimator
-from unbiased_area_estimation.utils import read_config
+from unbiased_area_estimation.config import Config
+from unbiased_area_estimation.sampling_design import SamplingDesignPipeline
 
 
 @click.command()
-@click.argument("config_file")
-def main(config_file):
+@click.argument(
+    "config_fpath", type=click.Path(file_okay=True, dir_okay=False), required=True
+)
+def main(config_fpath):
     # IMPORTANT - THIS IS A WIP THAT WILL LEAD TO WRONG RESULTS IF INCORRECT NODATA VALUES ARE USED.
     # TODO CHECK RASTER MASKING ZERO COUNTING
 
-    config = read_config(config_file)
-    sample_allocator = create_sample_allocator(config["sampling"])
+    config = Config.load_from_json(json_path=config_fpath)
 
-    area_estimator = AreaEstimator(
-        raster_path=config["raster_path"],
-        mask_paths=config["mask_paths"],
-        class_merge_dict=config["class_merge_dict"],
-        epsg=config["epsg"],
-        sample_allocator=sample_allocator,
-        temp_dir=config["output_dir"],
-        output_dir=config["output_dir"],
-    )
-
-    # Preprocesses data, creates a sample allocation and saves the samples in the output directory
-    area_estimator.run_complete_sampling_design(single_file=True)
+    sampling_design_pipeline = SamplingDesignPipeline(config=config)
+    sampling_design_pipeline.run()
 
 
 if __name__ == "__main__":

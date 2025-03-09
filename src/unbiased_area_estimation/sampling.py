@@ -11,26 +11,8 @@ from unbiased_area_estimation.sample_allocation import get_allocator
 
 
 class SamplingStrategy(ABC):
-    def __init__(self, allocation_method_name: str):
-        self.allocator = get_allocator(allocation_method_name)
-
-    def _compute_total_num_samples(
-        self, region: Region, expected_uas: Dict[int, float], target_error: float
-    ) -> Tuple[int, pd.DataFrame]:
-        region_name = region.name
-        print(f"Computing total number of samples for {region_name}...")
-
-        pixel_counts = region.get_pixel_counts_by_class()
-        total_pixels = sum(pixel_counts.values())
-        df = pd.DataFrame.from_dict(pixel_counts, orient="index", columns=["count"])
-        df["ua"] = df.index.map(expected_uas)
-        df["wh"] = df["count"] / total_pixels
-        df["s"] = np.sqrt(df["ua"] * (1 - df["ua"]))
-        df["nInt"] = df["wh"] * df["s"]
-
-        n = round(np.square(df["nInt"].sum() / target_error))
-
-        return n, df
+    def __init__(self):
+        pass
 
     def _get_coords(self, samples, geo_transform, proj_ref, wgs84):
         # ToDo better naming of arguments
@@ -69,16 +51,55 @@ class SamplingStrategy(ABC):
         pass
 
     @abstractmethod
-    def sample(self, region: Region, sampling_design: Dict[str, int], shuffle):
+    def sample(
+        self, region: Region, sampling_design: Dict[str, int], shuffle
+    ) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def get_expected_error(
+        self, sampling_design: Dict[int, int], detailed_design_df: pd.DataFrame
+    ):
+        pass
+
+    @abstractmethod
+    def _compute_total_num_samples(
+        self, region: Region, expected_uas: Dict[int, float], target_error: float
+    ) -> Tuple[int, pd.DataFrame]:
         pass
 
 
 class StratifiedRandomSampling(SamplingStrategy):
+    def _compute_total_num_samples(
+        self, region: Region, expected_uas: Dict[int, float], target_error: float
+    ) -> Tuple[int, pd.DataFrame]:
+        region_name = region.name
+        print(f"Computing total number of samples for {region_name}...")
+
+        if not region.pixel_counts:
+            pixel_counts = region.get_pixel_counts_by_class()
+        else:
+            pixel_counts = region.pixel_counts
+
+        total_pixels = sum(pixel_counts.values())
+        areas = region.get_areas()
+        df = pd.DataFrame.from_dict(pixel_counts, orient="index", columns=["count"])
+        df["area"] = df.index.map(areas)
+        df["ua"] = df.index.map(expected_uas)
+        df["wh"] = df["count"] / total_pixels
+        df["s"] = np.sqrt(df["ua"] * (1 - df["ua"]))
+        df["nInt"] = df["wh"] * df["s"]
+
+        n = int(np.ceil(np.square(df["nInt"].sum() / target_error)))
+
+        return n, df
+
     def create_design(
         self,
         region: Region,
         expected_uas: Dict[str, Dict[str, float]],
         target_error: float,
+        allocation_method_name: str,
     ):
         print("Using Statfied random sampling.")
 
@@ -86,13 +107,14 @@ class StratifiedRandomSampling(SamplingStrategy):
             region=region, expected_uas=expected_uas, target_error=target_error
         )
         weights = detailed_design_df["wh"].to_dict()
-        sampling_design = self.allocator.allocate(n_samples=n_samples, weights=weights)
+        allocator = get_allocator(allocation_method_name)
+        sampling_design = allocator.allocate(n_samples=n_samples, weights=weights)
 
         return sampling_design, detailed_design_df
 
     def sample(
         self, region: Region, num_samples_per_stratum: Dict[str, int], shuffle=True
-    ):
+    ) -> pd.DataFrame:
         samples = {}
         remaining_sample_counter = num_samples_per_stratum.copy()
         shape_x, shape_y = region.get_raster_shape()
@@ -142,6 +164,13 @@ class StratifiedRandomSampling(SamplingStrategy):
         base_ds = None
         return samples_df
 
+    def get_expected_error(
+        self, sampling_design: Dict[int, int], detailed_design_df: pd.DataFrame
+    ):
+        new_n_total = sum(sampling_design.values())
+        expected_error = detailed_design_df["nInt"].sum() / np.sqrt(new_n_total)
+        return expected_error
+
 
 class SimpleRandomSampling(SamplingStrategy):
     def create_design(
@@ -149,11 +178,22 @@ class SimpleRandomSampling(SamplingStrategy):
         region: Region,
         expected_uas: Dict[str, Dict[str, float]],
         target_error: float,
+        allocation_method_name: str,
     ):
         raise NotImplementedError()
 
     def sample(self, region: Region, sampling_design: Dict[str, int], shuffle=True):
         raise NotImplementedError()
+
+    def _compute_total_num_samples(
+        self, region: Region, expected_uas: Dict[int, float], target_error: float
+    ) -> Tuple[int, pd.DataFrame]:
+        pass
+
+    def get_expected_error(
+        self, sampling_design: Dict[str, int], detailed_design_df: pd.DataFrame
+    ):
+        pass
 
 
 class TwoStageRandomSampling(SamplingStrategy):
@@ -162,23 +202,33 @@ class TwoStageRandomSampling(SamplingStrategy):
         region: Region,
         expected_uas: Dict[str, Dict[str, float]],
         target_error: float,
+        allocation_method_name: str,
     ):
         raise NotImplementedError()
 
     def sample(self, region: Region, sampling_design: Dict[str, int], shuffle=True):
         raise NotImplementedError()
 
+    def _compute_total_num_samples(
+        self, region: Region, expected_uas: Dict[int, float], target_error: float
+    ) -> Tuple[int, pd.DataFrame]:
+        pass
 
-def create_sampler(
-    sampling_method_name: str, allocation_method_name: str
-) -> SamplingStrategy:
+    def get_expected_error(
+        self, sampling_design: Dict[str, int], detailed_design_df: pd.DataFrame
+    ):
+        pass
+
+
+def create_sampler(sampling_method_name: str) -> SamplingStrategy:
     samplers = {
         "random": SimpleRandomSampling,
         "stratified": StratifiedRandomSampling,
         "twostage": TwoStageRandomSampling,
     }
 
+    sampling_method_name = sampling_method_name.lower()
     if sampling_method_name not in samplers:
         raise IndexError(f"Invalid sampler_name provided. Use one of {samplers.keys()}")
 
-    return samplers[sampling_method_name](allocation_method_name=allocation_method_name)
+    return samplers[sampling_method_name]()

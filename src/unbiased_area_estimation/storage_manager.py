@@ -1,3 +1,4 @@
+import glob
 import os
 import os.path as op
 from typing import Dict, List, Tuple
@@ -11,9 +12,6 @@ class StorageManager:
         self.storage_base_path = storage_base_path
         self.preprocessed_data_dir = op.join(storage_base_path, "preprocessed_data")
         self.use_cached = use_cached
-
-        if op.exists(self.preprocessed_data_dir) and not use_cached:
-            print("Attention: Will overwrite existing preprocessed data")
 
         os.makedirs(self.preprocessed_data_dir, exist_ok=True)
 
@@ -93,12 +91,12 @@ class StorageManager:
         print("Saving sampling design...")
         design_file_name = self._get_design_fname(region_name)
         out_path = op.join(self.storage_base_path, design_file_name)
-        sampling_design.to_csv(out_path, index=False)
+        sampling_design.to_csv(out_path, index=True, index_label="class_id")
 
     def load_sampling_design(self, region_name: str) -> pd.DataFrame:
         design_file_name = self._get_design_fname(region_name)
         sampling_design_path = op.join(self.storage_base_path, design_file_name)
-        sampling_design = pd.read_csv(sampling_design_path)
+        sampling_design = pd.read_csv(sampling_design_path, index_col="class_id")
         return sampling_design
 
     def load_annotated_samples(self, region_name: str) -> pd.DataFrame:
@@ -108,4 +106,8 @@ class StorageManager:
         return samples_df
 
     def get_available_regions(self) -> List[str]:
-        pass
+        design_files = glob.glob(
+            op.join(self.storage_base_path, self._get_design_fname("*"))
+        )
+        region_names = ["_".join(op.basename(f).split("_")[:-1]) for f in design_files]
+        return region_names

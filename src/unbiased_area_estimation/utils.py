@@ -1,3 +1,4 @@
+import geopandas as gpd
 import rasterio as rio
 from osgeo import gdal
 
@@ -22,3 +23,14 @@ def get_map_dtype(map_path: str):
         raise ValueError("Raster or mask does not contain a valid band.")
 
     return raster_band.DataType
+
+
+def get_mask_spatial_ref(mask_path: str):
+    # mask is a vector file
+    mask = gpd.read_file(mask_path)
+    return mask.crs
+
+
+def get_map_spatial_ref(map_path: str):
+    with rio.open(map_path) as src:
+        return src.crs

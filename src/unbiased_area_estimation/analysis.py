@@ -6,18 +6,19 @@ import pandas as pd
 from unbiased_area_estimation.storage_manager import StorageManager
 
 
-class Analysis:
+class UnbiasedAreaEstimator:
     def __init__(self, results_dir: str):
         self.storage_manager = StorageManager(storage_base_path=results_dir)
 
-    def compute_unbiased_area_estimates(predicted, annotated, areas: Dict[str:float]):
-        classes = areas.keys()
+    def _compute_unbiased_area_estimates(
+        self, predicted, annotated, strata_areas: Dict[int, float]
+    ):
+        classes = list(strata_areas.keys())
         num_classes = len(classes)
         confusion_matrix = np.zeros((num_classes, num_classes))
 
-        # ToDo need to ensure we can reconstruct wh from areas always regardless of annotation method!!
-        wh = None
-        raise Exception("Need to implement wh")
+        total_area = np.sum(list(strata_areas.values()))
+        wh = {class_id: area / total_area for class_id, area in strata_areas.items()}
 
         # Compute confusion matrix
         for i, true_class in enumerate(classes):
@@ -43,7 +44,7 @@ class Analysis:
             )
 
         weights = np.array([wh[class_id] for class_id in classes])
-        areas = np.array([areas[class_id] for class_id in classes])
+        areas = np.array([strata_areas[class_id] for class_id in classes])
         weighted_confusion_matrix = confusion_matrix * weights[:, np.newaxis]
         weighted_norm_confusion_matrix = (
             weighted_confusion_matrix / counts_pred[:, np.newaxis]
@@ -120,7 +121,7 @@ class Analysis:
 
         classwise_metrics_df = pd.DataFrame(
             {
-                "Class": classes,
+                "Class": np.array(classes),
                 "Total Predicted": counts_pred,
                 "Total True": counts_true,
                 "Total Positive": total_positive,
@@ -144,10 +145,10 @@ class Analysis:
 
         overall_metrics_df = pd.DataFrame(
             {
-                "Overall Accuracy": oa,
-                "Overall Accuracy Variance": v_oa,
-                "Overall Accuracy Std Error": se_oa,
-                "Overall Accuracy 95% CI": oa_ci,
+                "Overall Accuracy": [oa],
+                "Overall Accuracy Variance": [v_oa],
+                "Overall Accuracy Std Error": [se_oa],
+                "Overall Accuracy 95% CI": [oa_ci],
             }
         )
 
@@ -171,18 +172,15 @@ class Analysis:
 
             classes = sampling_design_df.index
             areas = sampling_design_df["area"]
-            # weights = sampling_design_df["wh"]
-
-            # weights_dict = {
-            #     class_id: weight for class_id, weight in zip(classes, weights)
-            # }
-            areas_dict = {class_id: area for class_id, area in zip(classes, areas)}
+            areas_dict = {
+                class_id: float(area) for class_id, area in zip(classes, areas)
+            }
 
             (
                 classwise_metrics_df,
                 overall_metrics_df,
-            ) = self.compute_unbiased_area_estimates(
-                predicted=predicted, annotated=true, ares=areas_dict
+            ) = self._compute_unbiased_area_estimates(
+                predicted=predicted, annotated=true, strata_areas=areas_dict
             )
 
             results[region_name] = {

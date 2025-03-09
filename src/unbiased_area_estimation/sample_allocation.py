@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict
 
+import numpy as np
+
 
 class AllocationStrategy(ABC):
     def __init__(self):
@@ -23,7 +25,7 @@ class ProportionalAllocation(AllocationStrategy):
 
     def allocate(self, n_samples: int, weights: Dict[str, float]):
         print("Allocating samples to classes with Proportional Allocation.")
-        sampling_design = {k: v * n_samples for k, v in weights.items()}
+        sampling_design = {k: int(np.ceil(v * n_samples)) for k, v in weights.items()}
         return sampling_design
 
     def get_expected_error(self):

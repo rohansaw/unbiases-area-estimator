@@ -54,8 +54,6 @@ class Region:
                 pixel_counts.pop(nodata_value, None)
 
             pixel_counts = {int(k): int(v) for k, v in pixel_counts.items()}
-
-            print(f"Pixel counts: {pixel_counts}")
             self.pixel_counts = pixel_counts
             return pixel_counts
 

@@ -9,6 +9,8 @@ from rasterio.windows import Window
 from unbiased_area_estimation.storage_manager import StorageManager
 from unbiased_area_estimation.utils import (
     get_map_dtype,
+    get_map_spatial_ref,
+    get_mask_spatial_ref,
     get_nodata_value,
     get_width_height,
 )
@@ -61,6 +63,11 @@ class Preprocessor:
             if target_spatial_ref:
                 mask_path = self._reproject_vector_mask(
                     mask_in_path=mask_path, target_spatial_ref=target_spatial_ref
+                )
+
+            if get_mask_spatial_ref(mask_path) != get_map_spatial_ref(map_path):
+                raise ValueError(
+                    f"Map {map_path} and mask {mask_path} are not in the same spatial reference system."
                 )
 
             masked_map_path = self._mask_map(

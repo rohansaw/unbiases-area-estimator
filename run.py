@@ -18,7 +18,6 @@ def main(config_fpath):
         output_path=config.output_path,
         use_cached=config.use_cached,
         sampling_method=config.sampling.sampling_method,
-        allocation_method=config.sampling.allocation_method,
     )
     sampling_design_pipeline.run(config=config)
 

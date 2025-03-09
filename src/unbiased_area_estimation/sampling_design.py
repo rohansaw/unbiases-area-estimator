@@ -69,7 +69,7 @@ class SamplingDesignPipeline:
         self,
         regions: List[Region],
         sampling_designs: Dict[str, Dict[int, int]],
-        single_file=True,
+        merge_regions=True,
     ) -> Dict[str, pd.DataFrame]:
         print("Sampling...")
 
@@ -80,16 +80,16 @@ class SamplingDesignPipeline:
             sampling_design = sampling_designs[region.name]
             sample_set = self.sampler.sample(region, sampling_design)
             sample_set["RegionName"] = region.name
-            if single_file:
-                if not sample_sets_merged:
+            if merge_regions:
+                if sample_sets_merged is None:
                     sample_sets_merged = sample_set
                 else:
-                    pd.concat([sample_sets_merged, sample_set])
+                    sample_sets_merged = pd.concat([sample_sets_merged, sample_set])
             else:
                 self.storage_manager.save_samples(region.name, sample_set)
             sample_sets[region.name] = sample_set
 
-        if single_file:
+        if merge_regions:
             sample_sets_merged = sample_sets_merged.sample(frac=1)
             sample_sets_merged["PLOTID"] = np.arange(0, sample_sets_merged.shape[0])
             self.storage_manager.save_samples("all_regions", sample_sets_merged)

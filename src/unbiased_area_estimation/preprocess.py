@@ -17,7 +17,7 @@ from unbiased_area_estimation.utils import (
 
 
 class Preprocessor:
-    def __init__(self, storage_manager: StorageManager, chunk_size: int = 512):
+    def __init__(self, storage_manager: StorageManager, chunk_size: int = 1024):
         self.storage_manager = storage_manager
         self.chunk_size = chunk_size
 

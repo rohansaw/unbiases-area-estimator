@@ -8,10 +8,14 @@ import pandas as pd
 
 
 class StorageManager:
-    def __init__(self, storage_base_path: str, use_cached=True):
+    def __init__(self, storage_base_path: str, use_cached=True, cache_path: str = None):
         self.storage_base_path = storage_base_path
-        self.preprocessed_data_dir = op.join(storage_base_path, "preprocessed_data")
         self.use_cached = use_cached
+
+        if cache_path is None:
+            self.preprocessed_data_dir = op.join(storage_base_path, "cache")
+        else:
+            self.preprocessed_data_dir = cache_path
 
         os.makedirs(self.preprocessed_data_dir, exist_ok=True)
 
@@ -65,7 +69,7 @@ class StorageManager:
         map_hash = self._hash_file_contents(map_path)
         mask_hash = self._hash_file_contents(mask_path)
         return op.join(
-            self.preprocessed_data_dir, f"map_{map_hash}_{mask_hash}_masked.tif"
+            self.preprocessed_data_dir, f"mapmask_{map_hash}_{mask_hash}.tif"
         )
 
     def exists(self, path: str) -> bool:
@@ -102,7 +106,28 @@ class StorageManager:
     def load_annotated_samples(self, region_name: str) -> pd.DataFrame:
         samples_file_name = self._get_samples_fname(region_name)
         samples_path = op.join(self.storage_base_path, samples_file_name)
+
+        if os.path.exists(samples_path):
+            samples_df = pd.read_csv(samples_path)
+            return samples_df
+
+        # check if all_regions file exists (case for merged regions)
+        samples_path = op.join(
+            self.storage_base_path, self._get_samples_fname("all_regions")
+        )
+        if not os.path.exists(samples_path):
+            raise FileNotFoundError(
+                f"No merged or non-merged annotated file was found for region {region_name}."
+            )
+
+        # get all samples for the region
         samples_df = pd.read_csv(samples_path)
+        samples_df = samples_df[samples_df["RegionName"] == region_name]
+        if samples_df.empty:
+            raise ValueError(
+                f"No samples were found for region {region_name}. Please ensure you have the correct annotated file."
+            )
+
         return samples_df
 
     def get_available_regions(self) -> List[str]:

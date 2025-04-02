@@ -173,3 +173,5 @@ cython_debug/
 ignorefolder/
 
 .vscode/
+config.json
+.config.json

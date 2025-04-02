@@ -108,7 +108,9 @@ class StratifiedRandomSampling(SamplingStrategy):
         )
         weights = detailed_design_df["wh"].to_dict()
         allocator = get_allocator(allocation_method_name)
-        sampling_design = allocator.allocate(n_samples=n_samples, weights=weights)
+        sampling_design = allocator.allocate(
+            n_samples=n_samples, weights=weights, detailed_design_df=detailed_design_df
+        )
 
         return sampling_design, detailed_design_df
 
@@ -117,33 +119,48 @@ class StratifiedRandomSampling(SamplingStrategy):
     ) -> pd.DataFrame:
         samples = {}
         remaining_sample_counter = num_samples_per_stratum.copy()
-        shape_x, shape_y = region.get_raster_shape()
-        map_path = region.raster_path
+        shape_x, shape_y = region.get_shape()
+        map_path = region.map_path
+        mask_path = region.mask_path
 
         np.random.seed(5)
 
+        # TODO need to find a way to better encapsulate behaviour related to region (map/mask)
         # TODO add an upper bounds of tries?
-        while sum(remaining_sample_counter.values()) > 0:
-            x = np.random.randint(0, shape_x)
-            y = np.random.randint(0, shape_y)
+        with rio.open(map_path) as ds:
+            mask_ds = None
+            if mask_path:
+                mask_ds = rio.open(mask_path)
 
-            with rio.open(map_path) as ds:
-                value = ds.read(
-                    1, window=((y, y + 1), (x, x + 1))
-                )  # Read a single pixel
-                sample_cls = int(value[0, 0])  # Extract the scalar value
-                if (
-                    sample_cls in remaining_sample_counter
-                    and remaining_sample_counter[sample_cls] > 0
-                ):
-                    if (x, y, sample_cls) in samples:
-                        # This would break the assumption for random sampling.
-                        # We might want to think about using reservoir sampling.
-                        raise Exception(
-                            "The same sample was picked twice, not yet handling this case."
-                        )
-                    samples[(x, y, sample_cls)] = True
-                    remaining_sample_counter[sample_cls] -= 1
+            try:
+                while sum(remaining_sample_counter.values()) > 0:
+                    x = np.random.randint(0, shape_x)
+                    y = np.random.randint(0, shape_y)
+
+                    if mask_ds:
+                        mask_value = mask_ds.read(1, window=((y, y + 1), (x, x + 1)))
+                        if mask_value[0, 0] != 1:
+                            continue
+
+                    value = ds.read(
+                        1, window=((y, y + 1), (x, x + 1))
+                    )  # Read a single pixel
+                    sample_cls = int(value[0, 0])  # Extract the scalar value
+                    if (
+                        sample_cls in remaining_sample_counter
+                        and remaining_sample_counter[sample_cls] > 0
+                    ):
+                        if (x, y, sample_cls) in samples:
+                            # This would break the assumption for random sampling.
+                            # We might want to think about using reservoir sampling.
+                            raise Exception(
+                                "The same sample was picked twice, not yet handling this case."
+                            )
+                        samples[(x, y, sample_cls)] = True
+                        remaining_sample_counter[sample_cls] -= 1
+            finally:
+                if mask_ds:
+                    mask_ds.close()
 
         base_ds = gdal.Open(map_path)
         geo_transform = base_ds.GetGeoTransform()

@@ -1,11 +1,10 @@
 {
-    "map_path": "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/FullSample/outputfiles/AO_20240708_c_20240716_WC_SC.tif",
+    "map_path": "croplandmap.tif",
     "mask_paths": {
-        "free_ukraine": "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/free_ukraine_20240522_32636.shp",
-        "crimea": "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/crimea_32636.shp",
-        "occupied_wout_crimea": "/home/rohan/nasa-harvest/AnnotationProject/crop-maps/occupation_status_vectors/occ_wout_crimea_20240522_32636.shp"
+        "free_ukraine": "free_ukraine_20240522_32636.shp",
+        "crimea": "crimea_32636.shp"
     },
-    "output_path": "/home/rohan/nasa-harvest/AnnotationProject/data/playground",
+    "output_path": "annotation_output",
     "use_cached": true,
     "target_spatial_ref": "+proj=aea +lat_1=40 +lat_2=50 +lat_0=45 +lon_0=30 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_def",
     "class_merge_map": {

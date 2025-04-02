@@ -2,6 +2,7 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+import sklearn.metrics as metrics
 
 from unbiased_area_estimation.storage_manager import StorageManager
 
@@ -15,17 +16,13 @@ class UnbiasedAreaEstimator:
     ):
         classes = list(strata_areas.keys())
         num_classes = len(classes)
-        confusion_matrix = np.zeros((num_classes, num_classes))
 
         total_area = np.sum(list(strata_areas.values()))
         wh = {class_id: area / total_area for class_id, area in strata_areas.items()}
 
-        # Compute confusion matrix
-        for i, true_class in enumerate(classes):
-            for j, pred_class in enumerate(classes):
-                confusion_matrix[i, j] = np.sum(
-                    (annotated == true_class) & (predicted == pred_class)
-                )
+        confusion_matrix = metrics.confusion_matrix(
+            annotated, predicted, labels=classes
+        )
 
         counts_pred = np.sum(confusion_matrix, axis=1)  # Total predicted per class
         counts_true = np.sum(confusion_matrix, axis=0)  # Total actual per class
@@ -163,6 +160,7 @@ class UnbiasedAreaEstimator:
             sampling_design_df = self.storage_manager.load_sampling_design(
                 region_name=region_name
             )
+
             annotated_samples_df = self.storage_manager.load_annotated_samples(
                 region_name=region_name
             )

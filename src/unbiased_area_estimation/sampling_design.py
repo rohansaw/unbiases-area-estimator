@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -11,9 +12,15 @@ from unbiased_area_estimation.storage_manager import StorageManager
 
 
 class SamplingDesignPipeline:
-    def __init__(self, output_path: str, use_cached: bool, sampling_method: str):
+    def __init__(
+        self,
+        output_path: str,
+        use_cached: bool,
+        sampling_method: str,
+        cache_path: str = None,
+    ):
         self.storage_manager = StorageManager(
-            storage_base_path=output_path, use_cached=use_cached
+            storage_base_path=output_path, cache_path=cache_path, use_cached=use_cached
         )
         self.sampler = create_sampler(sampling_method_name=sampling_method)
         self.preprocessor = Preprocessor(storage_manager=self.storage_manager)
@@ -27,16 +34,31 @@ class SamplingDesignPipeline:
     ) -> List[Region]:
         print("Preprocessing...")
 
-        masked_map_paths = self.preprocessor.preprocess(
+        map_path_preproc, masks = self.preprocessor.preprocess(
             map_path=map_path,
             mask_paths=mask_paths,
             target_spatial_ref=target_spatial_ref,
             class_merge_map=class_merge_map,
         )
 
+        if len(masks) == 0:
+            return [
+                Region(
+                    name=Path(map_path).stem,
+                    map_path=map_path_preproc,
+                    mask_path=None,
+                    mask_extent=None,
+                )
+            ]
+
         regions = [
-            Region(name=name, raster_path=raster_path)
-            for name, raster_path in masked_map_paths.items()
+            Region(
+                name=name,
+                map_path=map_path_preproc,
+                mask_path=mask["path"],
+                mask_extent=mask["extent"],
+            )
+            for name, mask in masks.items()
         ]
         return regions
 

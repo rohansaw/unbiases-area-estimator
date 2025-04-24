@@ -6,6 +6,7 @@ import geopandas as gpd
 import numpy as np
 import rasterio as rio
 from osgeo import gdal
+from rasterio.windows import Window
 
 
 def get_nodata_value(map_path: str):
@@ -82,10 +83,40 @@ def benchmark(message="Execution time"):
     return decorator
 
 
-def get_classes(map_path: str):
+def get_classes(map_path: str, block_multiplier=(4, 4), max_full_read_size=1e9):
     unique_classes = set()
     with rio.open(map_path) as src:
-        for _, window in src.block_windows(1):
-            data = src.read(1, window=window)
-            unique_classes.update(np.unique(data))
+        # Check if the file is too large to read in one go
+        if src.width * src.height < max_full_read_size:
+            print(f"Reading {map_path} in one go")
+            unique_classes = np.unique(src.read(1))
+            return np.array(sorted(unique_classes))
+
+        # If the file is too large, read it in chunks
+        if src.count > 1:
+            raise ValueError("Currently only single band inputs supported.")
+
+        block_shape = src.block_shapes[0]  # (rows, cols)
+        block_h, block_w = block_shape
+
+        if (
+            block_h * block_w * block_multiplier[0] * block_multiplier[1]
+            < max_full_read_size
+        ):
+            chunk_h = min(block_h * block_multiplier[0], src.height)
+            chunk_w = min(block_w * block_multiplier[1], src.width)
+        else:
+            chunk_h = block_h
+            chunk_w = block_w
+
+        print(f"Reading {map_path} in chunks of {chunk_h}x{chunk_w}")
+        for row_off in range(0, src.height, chunk_h):
+            for col_off in range(0, src.width, chunk_w):
+                win_width = min(chunk_w, src.width - col_off)
+                win_height = min(chunk_h, src.height - row_off)
+                window = Window(col_off, row_off, win_width, win_height)
+
+                data = src.read(1, window=window)
+                unique_classes.update(np.unique(data))
+
     return np.array(sorted(unique_classes))

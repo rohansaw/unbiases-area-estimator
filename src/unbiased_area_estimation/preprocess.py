@@ -1,4 +1,4 @@
-import shutil
+import os
 import subprocess
 from typing import Dict, List
 
@@ -52,11 +52,9 @@ class Preprocessor:
 
         if not target_spatial_ref:
             print(
-                "No target spatial reference set. Reprojecting masks to match map spatial reference."
+                '"WARNING: No target spatial reference system provided. Ensure your map is equal area projected.")'
             )
-            raise NotImplementedError("Not yet implemented")
-
-        if target_spatial_ref:
+        else:
             map_path = self._reproject_map(
                 in_raster_path=map_path, target_spatial_ref=target_spatial_ref
             )
@@ -210,7 +208,7 @@ class Preprocessor:
 
         if len(class_merge_map) == len(set(class_merge_map.values())):
             print("Class merge map is 1:1 mapping. Copying raster to cache.")
-            shutil.copy(in_raster_path, out_raster_path)
+            os.symlink(in_raster_path, out_raster_path)
             return out_raster_path
 
         print(f"Merging classes in raster {in_raster_path}...")

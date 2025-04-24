@@ -17,12 +17,19 @@ from unbiased_area_estimation.utils import (
     get_mask_extent,
     get_mask_spatial_ref,
     get_nodata_value,
-    get_width_height,
 )
 
 
 class Preprocessor:
     def __init__(self, storage_manager: StorageManager, block_size: int = 2048):
+        """
+        Initialize the Preprocessor responsible for preparing raster and vector datasets.
+
+        Parameters:
+            storage_manager (StorageManager): Utility for handling storage access of data + caching.
+            block_size (int): Size of processing blocks for raster operations (used for performance tuning).
+        """
+
         self.storage_manager = storage_manager
         self.block_size = block_size
 
@@ -33,6 +40,19 @@ class Preprocessor:
         target_spatial_ref: str = None,
         class_merge_map: Dict[int, int] = None,
     ) -> Dict[str, str]:
+        """
+        Main preprocessing pipeline:
+        - Validates map format.
+        - Optionally reprojects the map and masks.
+        - Optionally merges class values in the map.
+        - Rasterizes vector masks to align with the map.
+
+        Returns:
+            Tuple[str, Dict[str, Dict]]:
+                - The processed map path.
+                - A dictionary of rasterized mask paths and their extents.
+        """
+
         if get_nodata_value(map_path) is None:
             # ToDo: In the future we should allow setting a nodata value
             print(
@@ -67,6 +87,7 @@ class Preprocessor:
         if len(mask_paths) == 0:
             return map_path, {}
 
+        # Rasterize each vector map, so vectors can be used for masking
         raster_mask_paths = {}
         for mask_name, mask_path in mask_paths.items():
             if target_spatial_ref:
@@ -90,6 +111,13 @@ class Preprocessor:
         return map_path, raster_mask_paths
 
     def _rasterize_mask(self, map_in_path: str, mask_in_path: str):
+        """
+        Rasterizes a vector mask to align with the spatial extent and resolution of the raster map.
+
+        Returns:
+            str: Path to the aligned, rasterized mask.
+        """
+
         gdf = gpd.read_file(mask_in_path)
         bounds = gdf.total_bounds
         min_x, min_y, max_x, max_y = bounds
@@ -148,6 +176,14 @@ class Preprocessor:
         target_spatial_ref: str,
         compress="DEFLATE",
     ):
+        """
+        Reprojects a raster to a new spatial reference system.
+        Essential for equal area projection and correct pixel area estimates.
+
+        Returns:
+            str: Path to the reprojected raster file.
+        """
+
         out_raster_path = self.storage_manager.get_reprojected_map_path(
             in_raster_path, target_spatial_ref
         )
@@ -198,6 +234,14 @@ class Preprocessor:
         return out_raster_path
 
     def _merge_classes(self, in_raster_path: str, class_merge_map: Dict[int, int]):
+        """
+        Merges class values in a raster based on a provided mapping.
+        Used to combine strata and reduce number of strate sizes.
+
+        Returns:
+            str: Path to the output raster with merged class values.
+        """
+
         out_raster_path = self.storage_manager.get_merged_classes_map_path(
             in_raster_path, class_merge_map
         )
@@ -246,6 +290,13 @@ class Preprocessor:
         return out_raster_path
 
     def _reproject_vector_mask(self, mask_in_path: str, target_spatial_ref: str):
+        """
+        Reprojects a vector mask to the target spatial reference system.
+
+        Returns:
+            str: Path to the reprojected vector mask.
+        """
+
         out_mask_path = self.storage_manager.get_reprojected_mask_path(
             mask_in_path, target_spatial_ref
         )
@@ -262,26 +313,3 @@ class Preprocessor:
 
         subprocess.run(command, shell=True, check=True)
         return out_mask_path
-
-    def _mask_map(self, map_in_path: str, mask_in_path: str, compress="DEFLATE"):
-        out_map_path = self.storage_manager.get_masked_map_path(
-            map_in_path, mask_in_path
-        )
-
-        if self.storage_manager.exists(out_map_path):
-            print(f"Using cached masked map {out_map_path}")
-            return out_map_path
-
-        print(f"Masking map {map_in_path} with mask {mask_in_path}...")
-
-        nodata_value = get_nodata_value(map_in_path)
-        width, height = get_width_height(map_in_path)
-        blocksize = min(self.block_size, width, height)
-
-        command = (
-            f'gdalwarp "{map_in_path}" "{out_map_path}" -cutline "{mask_in_path}" -crop_to_cutline '
-            f'-dstnodata {nodata_value} -co "COMPRESS={compress}" -co "TILED=YES" -co "BLOCKXSIZE={blocksize}" -co "BLOCKYSIZE={blocksize}"'
-        )
-
-        subprocess.run(command, shell=True, check=True)
-        return out_map_path

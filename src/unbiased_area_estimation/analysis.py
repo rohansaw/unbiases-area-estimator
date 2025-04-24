@@ -8,12 +8,32 @@ from unbiased_area_estimation.storage_manager import StorageManager
 
 
 class UnbiasedAreaEstimator:
+    """
+    Class for computing statistically unbiased area estimates and accuracy metrics
+    from annotated samples and stratified areas using post-classification error analysis.
+    """
+
     def __init__(self, results_dir: str):
         self.storage_manager = StorageManager(storage_base_path=results_dir)
 
     def _compute_unbiased_area_estimates(
         self, predicted, annotated, strata_areas: Dict[int, float]
     ):
+        """
+        Computes detailed class-wise and overall accuracy metrics and confidence intervals
+        using post-stratification accuracy assessment.
+
+        Parameters:
+            predicted (array-like): Predicted class labels.
+            annotated (array-like): Reference (ground truth) class labels.
+            strata_areas (Dict[int, float]): Area (in ha) per class/stratum.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame]:
+                - Class-wise metrics DataFrame
+                - Overall accuracy metrics DataFrame
+        """
+
         classes = list(strata_areas.keys())
         num_classes = len(classes)
 
@@ -152,16 +172,26 @@ class UnbiasedAreaEstimator:
         return classwise_metrics_df, overall_metrics_df
 
     def get_unbiased_area_estimates(self, annotated_column_name):
+        """
+        Loads samples and computes area estimates for each region stored.
+
+        Parameters:
+            annotated_column_name (str): Name of the column containing ground truth labels.
+
+        Returns:
+            Dict[str, Dict[str, pd.DataFrame]]: Mapping of region names to their classwise and overall metrics.
+        """
+
         regions = self.storage_manager.get_available_regions()
 
         results = {}
 
         for region_name in regions:
-            sampling_design_df = self.storage_manager.load_sampling_design(
+            sampling_design_df = self.storage_manager.load_sampling_design_details(
                 region_name=region_name
             )
 
-            annotated_samples_df = self.storage_manager.load_annotated_samples(
+            annotated_samples_df = self.storage_manager.load_samples(
                 region_name=region_name
             )
 

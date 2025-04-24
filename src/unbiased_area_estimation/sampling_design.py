@@ -81,7 +81,9 @@ class SamplingDesignPipeline:
                 target_error=target_error,
                 allocation_method_name=allocation_method_name,
             )
-            self.storage_manager.save_sampling_design(region.name, detailed_design_df)
+            self.storage_manager.save_sampling_design_details(
+                region.name, detailed_design_df
+            )
             sampling_designs[region.name] = sampling_design
             sampling_design_details[region.name] = detailed_design_df
 
@@ -127,7 +129,9 @@ class SamplingDesignPipeline:
         for region_name in region_names:
             new_sampling_design = sampling_designs[region_name]
             detailed_original_sampling_design = (
-                self.storage_manager.load_sampling_design(region_name=region_name)
+                self.storage_manager.load_sampling_design_details(
+                    region_name=region_name
+                )
             )
             expected_target_error = self.sampler.get_expected_error(
                 sampling_design=new_sampling_design,
@@ -163,3 +167,48 @@ class SamplingDesignPipeline:
             allocation_method_name=allocation_method_name,
         )
         self.sample_and_save(regions=regions, sampling_designs=sampling_designs)
+
+    def generate_additional_samples(
+        self, region: Region, config: Config, num_samples_per_region: Dict[str, int]
+    ):
+        sampling_design_details = self.storage_manager.load_sampling_design_details(
+            region.name
+        )
+        current_samples = self.storage_manager.load_samples(region_name=region.name)
+        num_samples = num_samples_per_region[region.name]
+
+        strata_weights = sampling_design_details["wh"].to_dict()
+        allocation_method_name = config.sampling.allocation_method
+        new_sampling_design = self.sampler.allocate(
+            strata_weights=strata_weights,
+            total_n_samples=num_samples,
+            allocation_method_name=allocation_method_name,
+            detailed_design_df=sampling_design_details,
+        )
+        new_samples = self.sampler.sample(
+            region=region,
+            sampling_design=new_sampling_design,
+            shuffle=True,
+            existing_samples_df=current_samples,
+        )
+
+        # Join with current samples
+        merged_samples = pd.concat(current_samples, new_samples)
+        return merged_samples
+
+    def add_samples_and_save(
+        self,
+        regions: list[Region],
+        config: Config,
+        num_samples_per_region: Dict[str, int],
+    ):
+        results = {}
+        for region in regions:
+            updated_samples = self.generate_additional_samples(
+                region=region,
+                config=config,
+                num_samples_per_region=num_samples_per_region,
+            )
+            results[region.name] = updated_samples
+
+        return results

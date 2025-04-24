@@ -10,26 +10,76 @@ from rasterio.windows import Window
 
 
 def get_nodata_value(map_path: str):
+    """
+    Retrieves the 'nodata' value from a raster file.
+
+    Parameters:
+        map_path (str): Path to the raster file.
+
+    Returns:
+        float or int: The nodata value used in the raster.
+    """
+
     with rio.open(map_path) as src:
         return src.nodata
 
 
 def get_width_height(map_path: str):
+    """
+    Gets the dimensions (width, height) of the raster.
+
+    Parameters:
+        map_path (str): Path to the raster file.
+
+    Returns:
+        Tuple[int, int]: Width and height in pixels.
+    """
+
     with rio.open(map_path) as src:
         return src.width, src.height
 
 
 def get_map_extent(map_path: str):
+    """
+    Retrieves the spatial bounding box of a raster.
+
+    Parameters:
+        map_path (str): Path to the raster file.
+
+    Returns:
+        rasterio.coords.BoundingBox: Bounding box of the raster.
+    """
+
     with rio.open(map_path) as src:
         return src.bounds
 
 
 def get_mask_extent(mask_path: str):
+    """
+    Computes the bounding box of a vector mask.
+
+    Parameters:
+        mask_path (str): Path to the vector file (e.g., shapefile).
+
+    Returns:
+        np.ndarray: Array of [minx, miny, maxx, maxy] coordinates.
+    """
+
     mask = gpd.read_file(mask_path)
     return mask.total_bounds
 
 
 def get_map_dtype(map_path: str):
+    """
+    Determines the data type of the first band in a raster.
+
+    Parameters:
+        map_path (str): Path to the raster file.
+
+    Returns:
+        int: GDAL data type enum.
+    """
+
     raster = gdal.Open(map_path, gdal.GA_ReadOnly)
     if raster is None:
         raise ValueError(f"Failed to open raster at {map_path}")
@@ -42,29 +92,77 @@ def get_map_dtype(map_path: str):
 
 
 def get_mask_spatial_ref(mask_path: str):
-    # mask is a vector file
+    """
+    Retrieves the coordinate reference system (CRS) of a vector mask.
+
+    Parameters:
+        mask_path (str): Path to the vector file.
+
+    Returns:
+        CRS: CRS object of the mask.
+    """
+
     mask = gpd.read_file(mask_path)
     return mask.crs
 
 
 def get_map_spatial_ref(map_path: str):
+    """
+    Retrieves the CRS of a raster.
+
+    Parameters:
+        map_path (str): Path to the raster file.
+
+    Returns:
+        CRS: CRS object of the raster.
+    """
+
     with rio.open(map_path) as src:
         return src.crs
 
 
 def are_crs_matching(map_path: str, mask_paths: List[str]):
+    """
+    Verifies that the CRS of a raster matches that of all masks.
+
+    Parameters:
+        map_path (str): Path to the raster.
+        mask_paths (List[str]): List of vector mask paths.
+
+    Returns:
+        bool: True if all CRSs match, False otherwise.
+    """
+
     map_crs = get_map_spatial_ref(map_path)
     all_mask_crs = get_mask_spatial_ref(mask_paths)
     return all([map_crs == mask_crs for mask_crs in all_mask_crs])
 
 
 def get_map_resolution(map_path: str):
+    """
+    Retrieves the pixel resolution (x, y) of a raster.
+
+    Parameters:
+        map_path (str): Path to the raster.
+
+    Returns:
+        Tuple[float, float]: Pixel width and height in map units.
+    """
+
     with rio.open(map_path) as src:
         return src.res
 
 
 def benchmark(message="Execution time"):
-    """Decorator to measure the execution time of a function."""
+    """
+    Dev-Util: Decorator to log the execution time of a function.
+
+    Parameters:
+        message (str): Custom message to prefix the timing output.
+
+    Returns:
+        Callable: Wrapped function with benchmarking.
+    """
 
     def decorator(func):
         @functools.wraps(func)
@@ -84,6 +182,19 @@ def benchmark(message="Execution time"):
 
 
 def get_classes(map_path: str, block_multiplier=(4, 4), max_full_read_size=1e9):
+    """
+    Retrieves all unique class values from a raster using either full read or block-wise strategy.
+    To avoid out of memory, set the max_full_read_size lower than you available memory.
+
+    Parameters:
+        map_path (str): Path to the raster.
+        block_multiplier (tuple): Multiplier for block size when reading in chunks.
+        max_full_read_size (float): Threshold to decide between full read and chunked read.
+
+    Returns:
+        np.ndarray: Sorted array of unique class values.
+    """
+
     unique_classes = set()
     with rio.open(map_path) as src:
         # Check if the file is too large to read in one go

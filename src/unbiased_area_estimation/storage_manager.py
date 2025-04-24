@@ -84,12 +84,7 @@ class StorageManager:
     def _get_samples_fname(self, region_name: str) -> str:
         return f"{region_name}_samples.csv"
 
-    def save_samples(self, region_name: str, samples: pd.DataFrame) -> None:
-        samples_file_name = self._get_samples_fname(region_name)
-        out_path = op.join(self.storage_base_path, samples_file_name)
-        samples.to_csv(out_path, index=False)
-
-    def save_sampling_design(
+    def save_sampling_design_details(
         self, region_name: str, sampling_design: pd.DataFrame
     ) -> None:
         print("Saving sampling design...")
@@ -97,13 +92,18 @@ class StorageManager:
         out_path = op.join(self.storage_base_path, design_file_name)
         sampling_design.to_csv(out_path, index=True, index_label="class_id")
 
-    def load_sampling_design(self, region_name: str) -> pd.DataFrame:
+    def load_sampling_design_details(self, region_name: str) -> pd.DataFrame:
         design_file_name = self._get_design_fname(region_name)
         sampling_design_path = op.join(self.storage_base_path, design_file_name)
         sampling_design = pd.read_csv(sampling_design_path, index_col="class_id")
         return sampling_design
 
-    def load_annotated_samples(self, region_name: str) -> pd.DataFrame:
+    def save_samples(self, region_name: str, samples: pd.DataFrame) -> None:
+        samples_file_name = self._get_samples_fname(region_name)
+        out_path = op.join(self.storage_base_path, samples_file_name)
+        samples.to_csv(out_path, index=False)
+
+    def load_samples(self, region_name: str) -> pd.DataFrame:
         samples_file_name = self._get_samples_fname(region_name)
         samples_path = op.join(self.storage_base_path, samples_file_name)
 
@@ -111,7 +111,7 @@ class StorageManager:
             samples_df = pd.read_csv(samples_path)
             return samples_df
 
-        # check if all_regions file exists (case for merged regions)
+        # check if 'all_regions' file exists (case for merged regions)
         samples_path = op.join(
             self.storage_base_path, self._get_samples_fname("all_regions")
         )

@@ -6,6 +6,10 @@ import pandas as pd
 
 
 class AllocationStrategy(ABC):
+    """
+    Abstract base class for defining a sample allocation strategy across strata/classes.
+    """
+
     def __init__(self):
         pass
 
@@ -17,6 +21,17 @@ class AllocationStrategy(ABC):
         weights: Dict[str, float],
         detailed_design_df: pd.DataFrame,
     ):
+        """
+        Allocate a number of samples to each class based on the implemented strategy.
+
+        Parameters:
+            n_samples (int): Total number of samples to allocate.
+            weights (Dict[str, float]): Proportional weights for each class.
+            detailed_design_df (pd.DataFrame): Additional details per class, e.g. standard deviation and counts.
+
+        Returns:
+            Dict[str, int]: Number of samples allocated per class.
+        """
         pass
 
     @abstractmethod
@@ -25,6 +40,10 @@ class AllocationStrategy(ABC):
 
 
 class ProportionalAllocation(AllocationStrategy):
+    """
+    Allocates samples proportionally based on the weight of each class.
+    """
+
     def __init__(self):
         pass
 
@@ -44,6 +63,10 @@ class ProportionalAllocation(AllocationStrategy):
 
 
 class NeymanAllocation(AllocationStrategy):
+    """
+    Implements Neyman allocation which minimizes variance by considering both stratum size and variability.
+    """
+
     def __init__(self):
         pass
 
@@ -70,6 +93,19 @@ class NeymanAllocation(AllocationStrategy):
 
 
 def get_allocator(allocator_name: str) -> AllocationStrategy:
+    """
+    Factory method to instantiate the appropriate allocation strategy.
+
+    Parameters:
+        allocator_name (str): Name of the desired allocation strategy ('proportional' or 'neyman').
+
+    Returns:
+        AllocationStrategy: Instance of the corresponding allocation strategy class.
+
+    Raises:
+        IndexError: If an invalid allocator name is provided.
+    """
+
     allocator_name = allocator_name.lower()
     allocators = {"proportional": ProportionalAllocation, "neyman": NeymanAllocation}
 

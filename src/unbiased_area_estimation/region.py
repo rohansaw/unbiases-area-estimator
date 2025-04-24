@@ -15,6 +15,16 @@ class Region:
     def __init__(
         self, name: str, map_path: str, mask_path: str = None, mask_extent: List = None
     ):
+        """
+        Initialize a Region object that represents a geographical area with an associated raster map.
+
+        Parameters:
+            name (str): Name of the region.
+            map_path (str): File path to the raster map (GeoTIFF or similar).
+            mask_path (str, optional): File path to a binary mask raster to constrain analysis.
+            mask_extent (List, optional): Extent info for validating mask application.
+        """
+
         self.name = name
         self.map_path = map_path
         self.mask_path = mask_path
@@ -23,6 +33,16 @@ class Region:
 
     @benchmark("get_pixel_counts_by_class")
     def get_pixel_counts_by_class(self) -> Dict[str, int]:
+        """
+        Computes the number of pixels per unique class value in the raster map, optionally within a mask.
+
+        Returns:
+            Dict[str, int]: Dictionary mapping class values to pixel counts.
+
+        Raises:
+            ValueError: If raster has unsupported data types or if mask metadata doesn't match the map.
+        """
+
         with rio.open(self.map_path) as src:
             nodata_value = src.nodata
             dtype = src.dtypes[0]
@@ -30,7 +50,7 @@ class Region:
             # Ensure only int-based rasters are processed
             if dtype not in ["uint8", "uint16", "int16", "uint32", "int32"]:
                 raise ValueError(
-                    "Sorry, only handling int-based values for the moment."
+                    "Sorry, only handling integer-based values for the moment. Please convert to int first."
                 )
 
             width, height = src.width, src.height
@@ -96,6 +116,13 @@ class Region:
             return pixel_counts
 
     def get_areas(self):
+        """
+        Calculates the area in hectares for each class based on pixel counts and raster resolution.
+
+        Returns:
+            Dict[int, float]: Dictionary mapping class values to their respective areas in hectares.
+        """
+
         if self.pixel_counts:
             pixel_counts = self.pixel_counts
         else:
@@ -109,4 +136,11 @@ class Region:
         return areas_ha
 
     def get_shape(self):
+        """
+        Retrieves the shape (width and height in pixels) of the regions raster map.
+
+        Returns:
+            Tuple[int, int]: Width and height of the raster.
+        """
+
         return get_width_height(self.map_path)

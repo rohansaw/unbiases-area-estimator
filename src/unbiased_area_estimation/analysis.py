@@ -33,7 +33,6 @@ class UnbiasedAreaEstimator:
                 - Class-wise metrics DataFrame
                 - Overall accuracy metrics DataFrame
         """
-
         classes = list(strata_areas.keys())
         num_classes = len(classes)
 
@@ -131,10 +130,13 @@ class UnbiasedAreaEstimator:
             s_pk_arr.append(ir)
         s_pk = np.sqrt(np.array(s_pk_arr))
 
-        se_areas = s_pk * areas
+        total_area = sum(areas)
+        reference_areas = total_true_weight_norm * total_area
+
+        se_areas = s_pk * total_area
         areas_ci = 1.96 * se_areas
-        uc_ci = areas_ci / areas
-        areas_se_percent = se_areas / areas
+        uc_ci = areas_ci / reference_areas
+        areas_se_percent = se_areas / reference_areas
 
         classwise_metrics_df = pd.DataFrame(
             {
@@ -152,7 +154,7 @@ class UnbiasedAreaEstimator:
                 "Producer's Std Error": se_pa,
                 "User's 95% CI": ua_ci,
                 "Producer's 95% CI": pa_ci,
-                "Area": areas,
+                "Areas": reference_areas,
                 "95% Area Error": areas_ci,
                 "UC 95% error": uc_ci,
                 "Area Std Error": se_areas,

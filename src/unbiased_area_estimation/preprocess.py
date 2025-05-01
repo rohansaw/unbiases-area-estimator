@@ -55,8 +55,8 @@ class Preprocessor:
 
         if get_nodata_value(map_path) is None:
             # ToDo: In the future we should allow setting a nodata value
-            print(
-                f"WARNING: Map {map_path} does not have a nodata value set. Using 0 as nodata value. This might cause incorrect calculations."
+            raise Exception(
+                f"WARNING: Map {map_path} does not have a nodata value set."
             )
 
         if get_map_dtype(map_path) not in [
@@ -109,66 +109,6 @@ class Preprocessor:
             }
 
         return map_path, raster_mask_paths
-
-    def _rasterize_mask(self, map_in_path: str, mask_in_path: str):
-        """
-        Rasterizes a vector mask to align with the spatial extent and resolution of the raster map.
-
-        Returns:
-            str: Path to the aligned, rasterized mask.
-        """
-
-        gdf = gpd.read_file(mask_in_path)
-        bounds = gdf.total_bounds
-        min_x, min_y, max_x, max_y = bounds
-
-        if min_y > max_y:
-            min_y, max_y = max_y, min_y
-            print("Switching min_y and max_y")
-
-        if min_x > max_x:
-            min_x, max_x = max_x, min_x
-            print("Switching min_x and max_x")
-
-        map_resolution = get_map_resolution(map_in_path)
-        map_extent = get_map_extent(map_in_path)
-
-        rasterized_mask_path = self.storage_manager.get_rasterized_mask_path(
-            mask_path=mask_in_path, resolution=map_resolution
-        )
-
-        if not self.storage_manager.exists(rasterized_mask_path):
-            print(f"Rasterizing mask {mask_in_path}...")
-            command = (
-                f"gdal_rasterize -tr {map_resolution[0]} {map_resolution[1]} -burn 1 "
-                f"-a_nodata 0 -te {map_extent[0]} {map_extent[1]} {map_extent[2]} {map_extent[3]} "
-                f'-co "COMPRESS=DEFLATE" -ot Byte "{mask_in_path}" "{rasterized_mask_path}"'
-            )
-
-            subprocess.run(command, shell=True, check=True)
-
-        rasterized_mask_mapaligned_path = self.storage_manager.get_masked_map_path(
-            map_path=map_in_path, mask_path=rasterized_mask_path
-        )
-
-        if self.storage_manager.exists(rasterized_mask_mapaligned_path):
-            print(f"Using cached rasterized mask {rasterized_mask_mapaligned_path}")
-            return rasterized_mask_mapaligned_path
-
-        src_nodata = get_nodata_value(map_in_path)
-        dtype = gdal.GetDataTypeName(get_map_dtype(map_in_path))
-        map_extent = get_map_extent(map_in_path)
-
-        # Align extent and resolution with map
-        command = (
-            f'gdalwarp -co "COMPRESS=DEFLATE" '
-            f"-tr {map_resolution[0]} {map_resolution[1]} -te {map_extent[0]} {map_extent[1]} {map_extent[2]} {map_extent[3]} "
-            f'-ot {dtype} -srcnodata "{src_nodata}" '
-            f'"{rasterized_mask_path}" "{rasterized_mask_mapaligned_path}"'
-        )
-
-        subprocess.run(command, shell=True, check=True)
-        return rasterized_mask_mapaligned_path
 
     def _reproject_map(
         self,
@@ -313,3 +253,63 @@ class Preprocessor:
 
         subprocess.run(command, shell=True, check=True)
         return out_mask_path
+
+    def _rasterize_mask(self, map_in_path: str, mask_in_path: str):
+        """
+        Rasterizes a vector mask to align with the spatial extent and resolution of the raster map.
+
+        Returns:
+            str: Path to the aligned, rasterized mask.
+        """
+
+        gdf = gpd.read_file(mask_in_path)
+        bounds = gdf.total_bounds
+        min_x, min_y, max_x, max_y = bounds
+
+        if min_y > max_y:
+            min_y, max_y = max_y, min_y
+            print("Switching min_y and max_y")
+
+        if min_x > max_x:
+            min_x, max_x = max_x, min_x
+            print("Switching min_x and max_x")
+
+        map_resolution = get_map_resolution(map_in_path)
+        map_extent = get_map_extent(map_in_path)
+
+        rasterized_mask_path = self.storage_manager.get_rasterized_mask_path(
+            mask_path=mask_in_path, resolution=map_resolution
+        )
+
+        if not self.storage_manager.exists(rasterized_mask_path):
+            print(f"Rasterizing mask {mask_in_path}...")
+            command = (
+                f"gdal_rasterize -tr {map_resolution[0]} {map_resolution[1]} -burn 1 "
+                f"-a_nodata 0 -te {map_extent[0]} {map_extent[1]} {map_extent[2]} {map_extent[3]} "
+                f'-co "COMPRESS=DEFLATE" -ot Byte "{mask_in_path}" "{rasterized_mask_path}"'
+            )
+
+            subprocess.run(command, shell=True, check=True)
+
+        rasterized_mask_mapaligned_path = self.storage_manager.get_masked_map_path(
+            map_path=map_in_path, mask_path=rasterized_mask_path
+        )
+
+        if self.storage_manager.exists(rasterized_mask_mapaligned_path):
+            print(f"Using cached rasterized mask {rasterized_mask_mapaligned_path}")
+            return rasterized_mask_mapaligned_path
+
+        src_nodata = get_nodata_value(map_in_path)
+        dtype = gdal.GetDataTypeName(get_map_dtype(map_in_path))
+        map_extent = get_map_extent(map_in_path)
+
+        # Align extent and resolution with map
+        command = (
+            f'gdalwarp -co "COMPRESS=DEFLATE" '
+            f"-tr {map_resolution[0]} {map_resolution[1]} -te {map_extent[0]} {map_extent[1]} {map_extent[2]} {map_extent[3]} "
+            f'-ot {dtype} -srcnodata "{src_nodata}" '
+            f'"{rasterized_mask_path}" "{rasterized_mask_mapaligned_path}"'
+        )
+
+        subprocess.run(command, shell=True, check=True)
+        return rasterized_mask_mapaligned_path

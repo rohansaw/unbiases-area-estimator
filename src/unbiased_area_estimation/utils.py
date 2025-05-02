@@ -164,7 +164,7 @@ def process_chunk(args):
         return set(np.unique(data))
 
 
-def get_unique_classes(map_path, max_full_read_size=1e10, num_workers=None):
+def get_unique_classes(map_path, max_full_read_size=1e9, num_workers=None):
     """
     Get unique classes from a raster map efficiently using parallel processing.
 

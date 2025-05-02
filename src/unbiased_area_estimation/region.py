@@ -85,7 +85,7 @@ class Region:
         """
 
         if num_workers is None:
-            num_workers = max(1, min(os.cpu_count() - 1, 16))
+            num_workers = max(1, os.cpu_count() - 1)
 
         with rio.open(self.map_path) as src:
             nodata_value = src.nodata

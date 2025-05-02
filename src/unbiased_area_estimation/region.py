@@ -1,8 +1,11 @@
-from typing import Dict, List
+import concurrent.futures
+import os
+from collections import Counter
+from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import rasterio as rio
 from rasterio.windows import Window
+from tqdm import tqdm
 
 from unbiased_area_estimation.utils import (
     benchmark,
@@ -31,8 +34,46 @@ class Region:
         self.mask_extent = mask_extent
         self.pixel_counts = None
 
+    def count_pixels_chunk(self, args: Tuple) -> Counter:
+        """
+        Process a single chunk of the raster file to count pixels by class.
+
+        Parameters:
+        -----------
+        args : Tuple
+            Contains window, use_mask, and nodata_value
+
+        Returns:
+        --------
+        Counter
+            Counter object with class values as keys and pixel counts as values
+        """
+        window, use_mask, nodata_value = args
+
+        try:
+            with rio.open(self.map_path) as src:
+                raster_chunk = src.read(1, window=window)
+
+                if use_mask:
+                    with rio.open(self.mask_path) as mask_src:
+                        mask_chunk = mask_src.read(1, window=window)
+                        raster_chunk = raster_chunk[mask_chunk == 1]
+
+                # Filter out nodata values
+                if nodata_value is not None:
+                    raster_chunk = raster_chunk[raster_chunk != nodata_value]
+
+                # Count unique values
+                return Counter(raster_chunk.flatten())
+
+        except Exception as e:
+            print(f"Error processing chunk at {window}: {e}")
+            return Counter()
+
     @benchmark("get_pixel_counts_by_class")
-    def get_pixel_counts_by_class(self) -> Dict[str, int]:
+    def get_pixel_counts_by_class(
+        self, num_workers: Optional[int] = None
+    ) -> Dict[str, int]:
         """
         Computes the number of pixels per unique class value in the raster map, optionally within a mask.
 
@@ -42,6 +83,9 @@ class Region:
         Raises:
             ValueError: If raster has unsupported data types or if mask metadata doesn't match the map.
         """
+
+        if num_workers is None:
+            num_workers = max(1, min(os.cpu_count() - 1, 16))
 
         with rio.open(self.map_path) as src:
             nodata_value = src.nodata
@@ -54,22 +98,11 @@ class Region:
                 )
 
             width, height = src.width, src.height
-            blockxsize, blockysize = src.block_shapes[0]
+            block_h, block_w = src.block_shapes[0]
 
-            # Ensure block size is meaningful, otherwise use 512 or min size
-            if blockxsize == width and blockysize == 1:  # Striped raster (inefficient)
-                blockxsize, blockysize = min(512, width), min(512, height)
-
-            print(f"Block size: {blockxsize}x{blockysize}")
-
-            pixel_counts = {}
-            start_row = 0
-            start_col = 0
-
-            # TODO - might want to set start and end column only within mask
-            mask_src = None
-            if self.mask_extent is not None:
-                mask_src = rio.open(self.mask_path)
+        use_mask = self.mask_path is not None and self.mask_extent is not None
+        if use_mask:
+            with rio.open(self.mask_path) as mask_src:
                 if mask_src.width != width or mask_src.height != height:
                     raise ValueError("Mask and raster do not have the same extent.")
                 if mask_src.res != src.res:
@@ -77,43 +110,52 @@ class Region:
                 if mask_src.crs != src.crs:
                     raise ValueError("Mask and raster do not have the same CRS.")
 
-            try:
-                # Process raster in blocks
-                for row_off in range(start_row, height, blockysize):
-                    for col_off in range(start_col, width, blockxsize):
-                        win_height = min(blockysize, height - row_off)
-                        win_width = min(blockxsize, width - col_off)
-                        window = Window(col_off, row_off, win_width, win_height)
-                        raster_chunk = src.read(1, window=window)
+        is_striped = block_h == 1 or block_w == 1
 
-                        if mask_src is not None:
-                            mask_chunk = mask_src.read(1, window=window)
-                            raster_chunk = raster_chunk[mask_chunk == 1]
+        if is_striped:
+            # For striped data, read along the stripes (typically rows)
+            if block_h == 1:  # Horizontal stripes
+                chunk_h = 8
+                chunk_w = src.width
+            else:  # Vertical stripes
+                chunk_h = src.height
+                chunk_w = 8
+        else:
+            # For tiled data, we use larger chunks than the native blocks
+            # to reduce overhead while keeping memory usage reasonable
+            chunk_h = block_h * 8
+            chunk_w = block_w * 8
 
-                        if raster_chunk is None:
-                            raise ValueError("Error reading raster block.")
+        print(f"Reading pixel counts with chunk size: {chunk_h}x{chunk_w}")
 
-                        # Count unique pixel values
-                        unique, counts = np.unique(raster_chunk, return_counts=True)
+        windows = []
+        for row_off in range(0, height, chunk_h):
+            for col_off in range(0, width, chunk_w):
+                win_width = min(chunk_w, width - col_off)
+                win_height = min(chunk_h, height - row_off)
+                windows.append(Window(col_off, row_off, win_width, win_height))
 
-                        for val, count in zip(unique, counts):
-                            pixel_counts[val] = pixel_counts.get(val, 0) + count
+        # Prepare arguments for each worker
+        args = [(window, use_mask, nodata_value) for window in windows]
 
-                if nodata_value is not None:
-                    pixel_counts.pop(nodata_value, None)
+        combined_counts = Counter()
 
-                pixel_counts = {int(k): int(v) for k, v in pixel_counts.items()}
-                self.pixel_counts = pixel_counts
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = [executor.submit(self.count_pixels_chunk, arg) for arg in args]
 
-            except Exception as e:
-                print(f"Error processing raster: {e}")
-                raise e
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc="Processing chunks",
+            ):
+                chunk_counts = future.result()
+                combined_counts.update(chunk_counts)
 
-            finally:
-                if mask_src is not None:
-                    mask_src.close()
+        # Convert to dictionary of integers
+        pixel_counts = {int(k): int(v) for k, v in combined_counts.items()}
+        self.pixel_counts = pixel_counts
 
-            return pixel_counts
+        return pixel_counts
 
     def get_areas(self):
         """

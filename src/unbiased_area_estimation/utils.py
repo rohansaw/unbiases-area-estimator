@@ -1,4 +1,6 @@
 import functools
+import multiprocessing as mp
+import os
 import time
 from typing import List
 
@@ -7,6 +9,7 @@ import numpy as np
 import rasterio as rio
 from osgeo import gdal
 from rasterio.windows import Window
+from tqdm import tqdm
 
 
 def get_nodata_value(map_path: str):
@@ -153,56 +156,96 @@ def get_map_resolution(map_path: str):
         return src.res
 
 
-def get_classes(map_path: str, block_multiplier=(16, 16), max_full_read_size=1e9):
+def process_chunk(args):
+    """Process a single chunk of the raster file to find unique values."""
+    map_path, window = args
+    with rio.open(map_path) as src:
+        data = src.read(1, window=window)
+        return set(np.unique(data))
+
+
+def get_unique_classes(map_path, max_full_read_size=1e10, num_workers=None):
     """
-    Retrieves all unique class values from a raster using either full read or block-wise strategy.
-    To avoid out of memory, set the max_full_read_size lower than you available memory.
+    Get unique classes from a raster map efficiently using parallel processing.
 
     Parameters:
-        map_path (str): Path to the raster.
-        block_multiplier (tuple): Multiplier for block size when reading in chunks.
-        max_full_read_size (float): Threshold to decide between full read and chunked read.
+    -----------
+    map_path : str
+        Path to the raster file
+    max_full_read_size : int
+        Maximum size (width*height) to read the raster in one go
+    num_workers : int, optional
+        Number of workers for parallel processing. Defaults to CPU count.
 
     Returns:
-        np.ndarray: Sorted array of unique class values.
+    --------
+    np.ndarray
+        Sorted array of unique class values
     """
+    # Determine number of workers if not specified
+    if num_workers is None:
+        num_workers = max(1, min(os.cpu_count() - 1, 16))
 
-    unique_classes = set()
     with rio.open(map_path) as src:
-        # Check if the file is too large to read in one go
+        # If file is small enough, read it in one go
         if src.width * src.height < max_full_read_size:
             print(f"Reading {map_path} in one go")
-            unique_classes = np.unique(src.read(1))
-            return np.array(sorted(unique_classes))
+            return np.array(sorted(np.unique(src.read(1))))
 
         # If the file is too large, read it in chunks
         if src.count > 1:
             raise ValueError("Currently only single band inputs supported.")
 
-        block_shape = src.block_shapes[0]  # (rows, cols)
-        block_h, block_w = block_shape
+        block_h, block_w = src.block_shapes[0]
 
-        if (
-            block_h * block_w * block_multiplier[0] * block_multiplier[1]
-            < max_full_read_size
-        ):
-            chunk_h = min(block_h * block_multiplier[0], src.height)
-            chunk_w = min(block_w * block_multiplier[1], src.width)
+        # Check if the raster is stored in stripes
+        is_striped = block_h == 1 or block_w == 1
+
+        if is_striped:
+            # For striped data, read along the stripes (typically rows)
+            if block_h == 1:  # Horizontal stripes
+                chunk_h = 8
+                chunk_w = src.width
+            else:  # Vertical stripes
+                chunk_h = src.height
+                chunk_w = 8
         else:
-            chunk_h = block_h
-            chunk_w = block_w
+            # For tiled data, we use larger chunks than the native blocks
+            # to reduce overhead while keeping memory usage reasonable
+            chunk_h = block_h * 8
+            chunk_w = block_w * 8
 
-        print(f"Reading {map_path} in chunks of {chunk_h}x{chunk_w}")
+        print(
+            f"Reading {map_path} in chunks of {chunk_h}x{chunk_w} using {num_workers} workers"
+        )
+
+        # Create windows for parallel processing
+        windows = []
         for row_off in range(0, src.height, chunk_h):
             for col_off in range(0, src.width, chunk_w):
                 win_width = min(chunk_w, src.width - col_off)
                 win_height = min(chunk_h, src.height - row_off)
-                window = Window(col_off, row_off, win_width, win_height)
+                windows.append(Window(col_off, row_off, win_width, win_height))
 
-                data = src.read(1, window=window)
-                unique_classes.update(np.unique(data))
+        # Process chunks in parallel
+        args = [(map_path, window) for window in windows]
+        unique_classes = set()
 
-    return np.array(sorted(unique_classes))
+        # Use progress bar to track processing
+        with mp.Pool(num_workers) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(process_chunk, args),
+                    total=len(args),
+                    desc="Processing chunks",
+                )
+            )
+
+            # Combine results from all chunks
+            for chunk_unique in results:
+                unique_classes.update(chunk_unique)
+
+        return np.array(sorted(unique_classes))
 
 
 def set_nodata_value(map_path, nodata_value, out_path, overwrite=False):

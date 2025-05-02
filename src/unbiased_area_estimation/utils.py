@@ -153,7 +153,7 @@ def get_map_resolution(map_path: str):
         return src.res
 
 
-def get_classes(map_path: str, block_multiplier=(4, 4), max_full_read_size=1e9):
+def get_classes(map_path: str, block_multiplier=(16, 16), max_full_read_size=1e9):
     """
     Retrieves all unique class values from a raster using either full read or block-wise strategy.
     To avoid out of memory, set the max_full_read_size lower than you available memory.

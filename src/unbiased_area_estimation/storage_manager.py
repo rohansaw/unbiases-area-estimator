@@ -30,21 +30,29 @@ class StorageManager:
     def _hash_dict(self, in_dict) -> str:
         return str(mmh3.hash(str(in_dict)) & 0xFFFFFFFF)
 
-    def get_reprojected_map_path(self, map_path: str, target_spatial_ref: str) -> str:
+    def get_reprojected_map_path(
+        self, map_path: str, target_spatial_ref: str, nodata_value: int
+    ) -> str:
         map_hash = self._hash_file_contents(map_path)
         tsr_hash = self._hash_str(target_spatial_ref)
-        return op.join(
-            self.preprocessed_data_dir, f"map_{map_hash}_{tsr_hash}_reprojected.tif"
+        nodata_value_hash = (
+            self._hash_str(str(nodata_value)) if nodata_value is not None else ""
         )
+        hash_joined = self._hash_str(map_hash + tsr_hash + nodata_value_hash)
+        return op.join(self.preprocessed_data_dir, f"map_{hash_joined}_reprojected.tif")
 
     def get_merged_classes_map_path(
-        self, map_path: list, class_merge_dict: Dict[int, int]
+        self, map_path: list, class_merge_dict: Dict[int, int], nodata_value: int
     ) -> str:
         map_hash = self._hash_file_contents(map_path)
         class_map_hash = self._hash_dict(class_merge_dict)
+        nodata_value_hash = (
+            self._hash_str(str(nodata_value)) if nodata_value is not None else ""
+        )
+        hash_joined = self._hash_str(map_hash + class_map_hash + nodata_value_hash)
         return op.join(
             self.preprocessed_data_dir,
-            f"map_{map_hash}_{class_map_hash}_reclassified.tif",
+            f"map_{hash_joined}_reclassified.tif",
         )
 
     def get_rasterized_mask_path(
@@ -70,6 +78,13 @@ class StorageManager:
         mask_hash = self._hash_file_contents(mask_path)
         return op.join(
             self.preprocessed_data_dir, f"mapmask_{map_hash}_{mask_hash}.tif"
+        )
+
+    def get_nodata_modified_path(self, map_path: str, nodata_value: str) -> str:
+        map_hash = self._hash_file_contents(map_path)
+        return op.join(
+            self.preprocessed_data_dir,
+            f"mapmask_{map_hash}_nodata{str(nodata_value)}.tif",
         )
 
     def exists(self, path: str) -> bool:

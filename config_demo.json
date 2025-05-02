@@ -6,7 +6,9 @@
     },
     "output_path": "annotation_output",
     "use_cached": true,
+    "cache_path": "/path/to/cache",
     "target_spatial_ref": "+proj=aea +lat_1=40 +lat_2=50 +lat_0=45 +lon_0=30 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_def",
+    "nodata_value": null,
     "class_merge_map": {
         "0": 1,
         "1": 1,

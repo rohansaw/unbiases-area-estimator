@@ -59,6 +59,7 @@ class SamplingStrategy(ABC):
         return coords_df
 
     def allocate(
+        self,
         strata_weights: Dict[str, float],
         total_n_samples: int,
         allocation_method_name: str,
@@ -168,6 +169,7 @@ class StratifiedRandomSampling(SamplingStrategy):
             strata_weights=weights,
             total_n_samples=n_samples,
             allocation_method_name=allocation_method_name,
+            detailed_design_df=None,
         )
 
         return sampling_design, detailed_design_df

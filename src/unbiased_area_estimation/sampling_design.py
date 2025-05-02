@@ -31,6 +31,7 @@ class SamplingDesignPipeline:
         mask_paths: List[str],
         target_spatial_ref: str = None,
         class_merge_map: Dict[int, int] = None,
+        nodata_value: int = None,
     ) -> List[Region]:
         print("Preprocessing...")
 
@@ -39,6 +40,7 @@ class SamplingDesignPipeline:
             mask_paths=mask_paths,
             target_spatial_ref=target_spatial_ref,
             class_merge_map=class_merge_map,
+            nodata_value=nodata_value,
         )
 
         if len(masks) == 0:
@@ -149,12 +151,14 @@ class SamplingDesignPipeline:
         expected_uas = config.sampling.expected_uas
         target_error = config.sampling.target_error
         allocation_method_name = config.sampling.allocation_method
+        nodata_value = config.nodata_value
 
         regions = self.preprocess(
             map_path=map_path,
             mask_paths=mask_paths,
             target_spatial_ref=target_spatial_ref,
             class_merge_map=class_merge_map,
+            nodata_value=nodata_value,
         )
 
         (

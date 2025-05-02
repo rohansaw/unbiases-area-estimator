@@ -153,34 +153,6 @@ def get_map_resolution(map_path: str):
         return src.res
 
 
-def benchmark(message="Execution time"):
-    """
-    Dev-Util: Decorator to log the execution time of a function.
-
-    Parameters:
-        message (str): Custom message to prefix the timing output.
-
-    Returns:
-        Callable: Wrapped function with benchmarking.
-    """
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.perf_counter()
-            result = func(*args, **kwargs)
-            end_time = time.perf_counter()
-            execution_time = end_time - start_time
-            print(
-                f"{message}: Function '{func.__name__}' executed in {execution_time:.6f} seconds"
-            )
-            return result
-
-        return wrapper
-
-    return decorator
-
-
 def get_classes(map_path: str, block_multiplier=(4, 4), max_full_read_size=1e9):
     """
     Retrieves all unique class values from a raster using either full read or block-wise strategy.
@@ -231,3 +203,42 @@ def get_classes(map_path: str, block_multiplier=(4, 4), max_full_read_size=1e9):
                 unique_classes.update(np.unique(data))
 
     return np.array(sorted(unique_classes))
+
+
+def set_nodata_value(map_path, nodata_value, out_path, overwrite=False):
+    with rio.open(map_path) as src:
+        profile = src.profile.copy()
+        data = src.read()
+
+    profile.update(nodata=nodata_value, dtype=profile["dtype"])
+
+    with rio.open(out_path, "w", **profile) as dst:
+        dst.write(data)
+
+
+def benchmark(message="Execution time"):
+    """
+    Dev-Util: Decorator to log the execution time of a function.
+
+    Parameters:
+        message (str): Custom message to prefix the timing output.
+
+    Returns:
+        Callable: Wrapped function with benchmarking.
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.perf_counter()
+            result = func(*args, **kwargs)
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+            print(
+                f"{message}: Function '{func.__name__}' executed in {execution_time:.6f} seconds"
+            )
+            return result
+
+        return wrapper
+
+    return decorator

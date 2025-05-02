@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -21,6 +21,8 @@ class Config:
     sampling: SamplingConfig
     output_path: str
     use_cached: bool
+    cache_path: str
+    nodata_value: Any
 
     @staticmethod
     def load_from_json(json_path: str) -> "Config":

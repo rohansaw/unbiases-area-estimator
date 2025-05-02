@@ -17,11 +17,12 @@ from unbiased_area_estimation.utils import (
     get_mask_extent,
     get_mask_spatial_ref,
     get_nodata_value,
+    set_nodata_value,
 )
 
 
 class Preprocessor:
-    def __init__(self, storage_manager: StorageManager, block_size: int = 2048):
+    def __init__(self, storage_manager: StorageManager, block_size: int = 4096):
         """
         Initialize the Preprocessor responsible for preparing raster and vector datasets.
 
@@ -39,6 +40,7 @@ class Preprocessor:
         mask_paths: List[str],
         target_spatial_ref: str = None,
         class_merge_map: Dict[int, int] = None,
+        nodata_value: int = None,
     ) -> Dict[str, str]:
         """
         Main preprocessing pipeline:
@@ -53,10 +55,9 @@ class Preprocessor:
                 - A dictionary of rasterized mask paths and their extents.
         """
 
-        if get_nodata_value(map_path) is None:
-            # ToDo: In the future we should allow setting a nodata value
+        if get_nodata_value(map_path) is None and nodata_value is None:
             raise Exception(
-                f"WARNING: Map {map_path} does not have a nodata value set."
+                f"WARNING: Map {map_path} does not have a nodata value set and no nodata value is specified."
             )
 
         if get_map_dtype(map_path) not in [
@@ -75,14 +76,19 @@ class Preprocessor:
                 '"WARNING: No target spatial reference system provided. Ensure your map is equal area projected.")'
             )
         else:
-            map_path = self._reproject_map(
+            map_path = self.reproject_map(
                 in_raster_path=map_path, target_spatial_ref=target_spatial_ref
             )
 
         if class_merge_map:
-            map_path = self._merge_classes(
+            map_path = self.merge_classes(
                 in_raster_path=map_path, class_merge_map=class_merge_map
             )
+
+        # If nodata value was not yet set, since no reprojection or merging was done
+        # We need to set it manually now
+        if get_nodata_value(map_path) and nodata_value is not None:
+            map_path = self.set_nodata_value(map_path, nodata_value)
 
         if len(mask_paths) == 0:
             return map_path, {}
@@ -91,7 +97,7 @@ class Preprocessor:
         raster_mask_paths = {}
         for mask_name, mask_path in mask_paths.items():
             if target_spatial_ref:
-                mask_path = self._reproject_vector_mask(
+                mask_path = self.reproject_vector_mask(
                     mask_in_path=mask_path, target_spatial_ref=target_spatial_ref
                 )
 
@@ -100,7 +106,7 @@ class Preprocessor:
                     f"Map {map_path} and mask {mask_path} are not in the same spatial reference system."
                 )
 
-            rastered_mask_path = self._rasterize_mask(
+            rastered_mask_path = self.rasterize_mask(
                 map_in_path=map_path, mask_in_path=mask_path
             )
             raster_mask_paths[mask_name] = {
@@ -110,11 +116,12 @@ class Preprocessor:
 
         return map_path, raster_mask_paths
 
-    def _reproject_map(
+    def reproject_map(
         self,
         in_raster_path: str,
         target_spatial_ref: str,
-        compress="DEFLATE",
+        compress: str = "DEFLATE",
+        nodata_value: int = None,
     ):
         """
         Reprojects a raster to a new spatial reference system.
@@ -125,7 +132,7 @@ class Preprocessor:
         """
 
         out_raster_path = self.storage_manager.get_reprojected_map_path(
-            in_raster_path, target_spatial_ref
+            in_raster_path, target_spatial_ref, nodata_value
         )
 
         if self.storage_manager.exists(out_raster_path):
@@ -140,6 +147,10 @@ class Preprocessor:
             src_nodata = src.nodata
             target_nodata = src.nodata
             target_resolution = src.res
+
+            if nodata_value is not None:
+                src_nodata = nodata_value
+                target_nodata = nodata_value
 
             target_transform, target_width, target_height = calculate_default_transform(
                 src_spatial_ref,
@@ -173,7 +184,12 @@ class Preprocessor:
 
         return out_raster_path
 
-    def _merge_classes(self, in_raster_path: str, class_merge_map: Dict[int, int]):
+    def merge_classes(
+        self,
+        in_raster_path: str,
+        class_merge_map: Dict[int, int],
+        nodata_value: int = None,
+    ):
         """
         Merges class values in a raster based on a provided mapping.
         Used to combine strata and reduce number of strate sizes.
@@ -183,7 +199,7 @@ class Preprocessor:
         """
 
         out_raster_path = self.storage_manager.get_merged_classes_map_path(
-            in_raster_path, class_merge_map
+            in_raster_path, class_merge_map, nodata_value
         )
 
         if self.storage_manager.exists(out_raster_path):
@@ -191,7 +207,7 @@ class Preprocessor:
             return out_raster_path
 
         if len(class_merge_map) == len(set(class_merge_map.values())):
-            print("Class merge map is 1:1 mapping. Copying raster to cache.")
+            print("Class merge map is 1:1 mapping. Linking raster to cache.")
             os.symlink(in_raster_path, out_raster_path)
             return out_raster_path
 
@@ -199,6 +215,9 @@ class Preprocessor:
         with rio.open(in_raster_path) as src:
             profile = src.profile.copy()
             height, width = src.shape
+
+            if nodata_value:
+                profile.update(nodata=nodata_value, dtype=profile["dtype"])
 
             blocksize = min(self.block_size, width, height)
 
@@ -229,7 +248,23 @@ class Preprocessor:
 
         return out_raster_path
 
-    def _reproject_vector_mask(self, mask_in_path: str, target_spatial_ref: str):
+    def set_nodata_value(self, map_path, nodata_value):
+        """
+        Creates a copy of the original raster with the nodata value set.
+        Creating copy instead of modyfing inplace to avoid write problems
+        with open files on Windows.
+
+        Returns:
+            str: Path to the modified raster
+        """
+        modified_map_out_path = self.storage_manager.get_nodata_modified_path(
+            map_path, nodata_value
+        )
+
+        set_nodata_value(map_path, nodata_value, modified_map_out_path)
+        return modified_map_out_path
+
+    def reproject_vector_mask(self, mask_in_path: str, target_spatial_ref: str):
         """
         Reprojects a vector mask to the target spatial reference system.
 
@@ -254,7 +289,7 @@ class Preprocessor:
         subprocess.run(command, shell=True, check=True)
         return out_mask_path
 
-    def _rasterize_mask(self, map_in_path: str, mask_in_path: str):
+    def rasterize_mask(self, map_in_path: str, mask_in_path: str):
         """
         Rasterizes a vector mask to align with the spatial extent and resolution of the raster map.
 
